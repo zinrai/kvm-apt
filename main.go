@@ -24,43 +24,48 @@ type Domain struct {
 }
 
 func main() {
-	vmName := flag.String("vm", "", "Name of the VM")
-	imagePath := flag.String("image", "", "Path to the KVM image")
-	packages := flag.String("packages", "", "Comma-separated list of packages to install")
+	var imagePath string
+	var packages string
+
+	flag.StringVar(&imagePath, "image", "", "Path to the KVM image")
+	flag.StringVar(&packages, "packages", "", "Comma-separated list of packages to install")
 	flag.Parse()
 
-	if *packages == "" || (*vmName == "" && *imagePath == "") {
-		fmt.Println("Missing required arguments")
-		fmt.Println("Usage: kvm-apt (-vm <vm_name> | -image <image_path>) -packages <package1,package2,..>")
+	args := flag.Args()
+	if len(args) != 1 || packages == "" {
+		fmt.Println("Usage: kvm-apt [-image <image_path>] -packages <package1,package2,...> <vm_name>")
+		os.Exit(1)
+	}
+
+	vmName := args[0]
+
+	if !isVMStopped(vmName) {
+		fmt.Printf("The VM '%s' is currently running. Please stop it before customizing.\n", vmName)
 		os.Exit(1)
 	}
 
 	var targetImage string
 	var err error
 
-	if *vmName != "" {
-		if !isVMStopped(*vmName) {
-			fmt.Printf("The VM '%s' is currently running. Please stop it before customizing.\n", *vmName)
-			os.Exit(1)
-		}
-		targetImage, err = getVMDiskPath(*vmName)
-		if err != nil {
-			fmt.Printf("Failed to get disk path for VM '%s': %v\n", *vmName, err)
-			os.Exit(1)
-		}
-		fmt.Printf("Using first disk of VM '%s': %s\n", *vmName, targetImage)
-	} else {
-		targetImage = *imagePath
+	if imagePath != "" {
+		targetImage = imagePath
 		fmt.Printf("Using specified image: %s\n", targetImage)
-		if err := verifyImageBelongsToVM(targetImage); err != nil {
+		if err := verifyImageBelongsToVM(targetImage, vmName); err != nil {
 			fmt.Printf("Verification failed: %v\n", err)
 			os.Exit(1)
 		}
+	} else {
+		targetImage, err = getVMDiskPath(vmName)
+		if err != nil {
+			fmt.Printf("Failed to get disk path for VM '%s': %v\n", vmName, err)
+			os.Exit(1)
+		}
+		fmt.Printf("Using first disk of VM '%s': %s\n", vmName, targetImage)
 	}
 
-	fmt.Printf("Packages to install: %s\n", *packages)
+	fmt.Printf("Packages to install: %s\n", packages)
 
-	packageList := strings.Split(*packages, ",")
+	packageList := strings.Split(packages, ",")
 	err = customizeKVMImage(targetImage, packageList)
 	if err != nil {
 		fmt.Printf("KVM image customization failed: %v\n", err)
@@ -128,29 +133,20 @@ func getVMDiskPath(vmName string) (string, error) {
 	return domain.Devices.Disks[0].Source.File, nil
 }
 
-func verifyImageBelongsToVM(imagePath string) error {
-	cmd := exec.Command("sudo", "virsh", "list", "--name", "--all")
-	output, err := cmd.Output()
+func verifyImageBelongsToVM(imagePath, vmName string) error {
+	disks, err := getVMDisks(vmName)
 	if err != nil {
-		return fmt.Errorf("failed to get list of all VMs: %w", err)
+		return fmt.Errorf("failed to get disks for VM '%s': %w", vmName, err)
 	}
 
-	allVMs := strings.Split(strings.TrimSpace(string(output)), "\n")
-	for _, vm := range allVMs {
-		disks, err := getVMDisks(vm)
-		if err != nil {
-			fmt.Printf("Warning: Failed to get disks for VM '%s': %v\n", vm, err)
-			continue
-		}
-		for _, disk := range disks {
-			if disk == imagePath {
-				fmt.Printf("Image '%s' belongs to VM '%s'\n", imagePath, vm)
-				return nil
-			}
+	for _, disk := range disks {
+		if disk == imagePath {
+			fmt.Printf("Image '%s' belongs to VM '%s'\n", imagePath, vmName)
+			return nil
 		}
 	}
 
-	return fmt.Errorf("the specified image '%s' is not connected to any known VM", imagePath)
+	return fmt.Errorf("the specified image '%s' is not connected to VM '%s'", imagePath, vmName)
 }
 
 func getVMDisks(vmName string) ([]string, error) {

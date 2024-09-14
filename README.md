@@ -12,8 +12,8 @@
 ## Notes
 
 - The tool requires sudo privileges to run virsh commands and virt-customize.
-- When using the `-vm` option, the tool will automatically use the first disk of the specified VM.
-- When using the `-image` option, the tool will verify that the image belongs to a known VM before proceeding.
+- When not using the `-image` option, the tool will automatically use the first disk of the specified VM.
+- When using the `-image` option, the tool will verify that the image belongs to the specified VM before proceeding.
 - The tool will not make changes to running VMs. Ensure the target VM is stopped before using this tool.
 
 ## Requirements
@@ -35,23 +35,23 @@ $ go build
 ### Installing packages on a VM:
 
 ```
-$ ./kvm-apt -vm <vm_name> -packages <package1,package2,...>
+$ ./kvm-apt -packages <package1,package2,...> <vm_name>
 ```
 
 Example:
 ```
-$ ./kvm-apt -vm ubuntu20-04 -packages python3,golang,vim
+$ ./kvm-apt -packages python3,golang,vim ubuntu20-04
 ```
 
 ### Installing packages on a specific image:
 
 ```
-$ ./kvm-apt -vm <vm_name> -image <path_to_image> -packages <package1,package2,...>
+$ ./kvm-apt -image <path_to_image> -packages <package1,package2,...> <vm_name>
 ```
 
 Example:
 ```
-$ ./kvm-apt -vm debian10 -image /path/to/debian.qcow2 -packages python3-consul,nginx
+$ ./kvm-apt -image /path/to/debian.qcow2 -packages python3-consul,nginx debian10
 ```
 
 ## License
